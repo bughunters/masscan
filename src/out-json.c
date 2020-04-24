@@ -4,6 +4,14 @@
 #include "string_s.h"
 #include <ctype.h>
 
+/* Used to keep state to know when to not place a comma */
+static int json_stream_started = 0;
+
+/* Ugly macro, required in json_out_{status,banner} */
+#define SEPARATE_ENTRIES()     if (json_stream_started) \
+        fprintf(fp, ",\n"); \
+    else \
+        json_stream_started = 1
 
 /****************************************************************************
  ****************************************************************************/
@@ -21,7 +29,7 @@ static void
 json_out_close(struct Output *out, FILE *fp)
 {
     UNUSEDPARM(out);
-    fprintf(fp, "]\n"); // enclose the atomic {}'s into an []
+    fprintf(fp, "\n]\n"); // enclose the atomic {}'s into an []
 }
 
 //{ ip: "124.53.139.201", ports: [ {port: 443, proto: "tcp", status: "open", reason: "syn-ack", ttl: 48} ] }
@@ -32,17 +40,10 @@ json_out_status(struct Output *out, FILE *fp, time_t timestamp, int status,
                unsigned ip, unsigned ip_proto, unsigned port, unsigned reason, unsigned ttl)
 {
     char reason_buffer[128];
-    UNUSEDPARM(out);
-    //UNUSEDPARM(timestamp);
 
-    /* Trailing comma breaks some JSON parsers. We don't know precisely when
-     * we'll end, but we do know when we begin, so instead of appending
-     * a command to the record, we prepend it -- but not before first record */
-    if (out->is_first_record_seen)
-        fprintf(fp, ",\n");
-    else
-        out->is_first_record_seen = 1;
-    
+    UNUSEDPARM(out);
+    SEPARATE_ENTRIES();
+
     fprintf(fp, "{ ");
     fprintf(fp, "  \"ip\": \"%u.%u.%u.%u\", ",
             (ip>>24)&0xFF, (ip>>16)&0xFF, (ip>> 8)&0xFF, (ip>> 0)&0xFF);
@@ -55,7 +56,7 @@ json_out_status(struct Output *out, FILE *fp, time_t timestamp, int status,
                 reason_string(reason, reason_buffer, sizeof(reason_buffer)),
                 ttl
             );
-    fprintf(fp, "}\n");
+    fprintf(fp, "}");
 
 
 }
@@ -107,16 +108,8 @@ json_out_banner(struct Output *out, FILE *fp, time_t timestamp,
     char banner_buffer[65536];
 
     UNUSEDPARM(ttl);
-    //UNUSEDPARM(timestamp);
+    SEPARATE_ENTRIES();
 
-    /* Trailing comma breaks some JSON parsers. We don't know precisely when
-     * we'll end, but we do know when we begin, so instead of appending
-     * a command to the record, we prepend it -- but not before first record */
-    if (out->is_first_record_seen)
-        fprintf(fp, ",\n");
-    else
-        out->is_first_record_seen = 1;
-    
     fprintf(fp, "{ ");
     fprintf(fp, "  \"ip\": \"%u.%u.%u.%u\", ",
             (ip>>24)&0xFF, (ip>>16)&0xFF, (ip>> 8)&0xFF, (ip>> 0)&0xFF);
@@ -127,31 +120,9 @@ json_out_banner(struct Output *out, FILE *fp, time_t timestamp,
             masscan_app_to_string(proto),
             normalize_json_string(px, length, banner_buffer, sizeof(banner_buffer))
             );
-    fprintf(fp, "}\n");
+    fprintf(fp, "}");
 
     UNUSEDPARM(out);
-
-/*    fprintf(fp, "<host endtime=\"%u\">"
-            "<address addr=\"%u.%u.%u.%u\" addrtype=\"ipv4\"/>"
-            "<ports>"
-            "<port protocol=\"%s\" portid=\"%u\">"
-            "<state state=\"open\" reason=\"%s\" reason_ttl=\"%u\" />"
-            "<service name=\"%s\" banner=\"%s\"></service>"
-            "</port>"
-            "</ports>"
-            "</host>"
-            "\r\n",
-            (unsigned)timestamp,
-            (ip>>24)&0xFF,
-            (ip>>16)&0xFF,
-            (ip>> 8)&0xFF,
-            (ip>> 0)&0xFF,
-            name_from_ip_proto(ip_proto),
-            port,
-            reason, ttl,
-            masscan_app_to_string(proto),
-            normalize_string(px, length, banner_buffer, sizeof(banner_buffer))
-            );*/
 }
 
 /****************************************************************************
